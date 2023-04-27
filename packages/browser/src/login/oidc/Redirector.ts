@@ -37,7 +37,9 @@ export default class Redirector implements IRedirector {
     if (options && options.handleRedirect) {
       options.handleRedirect(redirectUrl);
     } else if (options && options.redirectByReplacingState) {
-      window.history.replaceState({}, "", redirectUrl);
+      try {
+        window.history.replaceState({}, "", redirectUrl);
+      } catch(e) {}
     } else {
       window.location.href = redirectUrl;
     }

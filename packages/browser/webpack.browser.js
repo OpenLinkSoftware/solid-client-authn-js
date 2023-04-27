@@ -24,7 +24,8 @@ const path = require("path");
 const commonConfig = require("./webpack.common.js");
 
 module.exports = () => {
-  const envConfig = require(`./webpack.prod.js`);
+//  const envConfig = require(`./webpack.prod.js`);
+  const envConfig = require(`./webpack.dev.js`);
 
   const browserConfig = {
     output: {

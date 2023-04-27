@@ -187,6 +187,8 @@ export default class ClientAuthentication {
     // 'code' and 'state'), and so if the user simply refreshes this page our
     // authentication library will be called again with what are now invalid
     // query parameters!).
-    window.history.replaceState(null, "", cleanedUpUrl.toString());
+    try {
+      window.history.replaceState(null, "", cleanedUpUrl.toString());
+    } catch(e) {}
   }
 }

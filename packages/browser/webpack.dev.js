@@ -19,19 +19,21 @@
 // SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 const path = require("path");
-const HtmlWebpackPlugin = require("html-webpack-plugin");
+//const HtmlWebpackPlugin = require("html-webpack-plugin");
 
 module.exports = {
   mode: "development",
-  devtool: "inline-source-map",
+//  devtool: "inline-source-map",
+  devtool: "source-map",
   devServer: {
     contentBase: path.join(__dirname, "browserDist"),
     port: 9000,
-  },
-  plugins: [
-    new HtmlWebpackPlugin({
-      title: "Solid Authenticator Test Page",
-      template: "./src/index.html",
-    }),
-  ],
+  }
+//  ,
+//  plugins: [
+//    new HtmlWebpackPlugin({
+//      title: "Solid Authenticator Test Page",
+//      template: "./src/index.html",
+//    }),
+//  ],
 };

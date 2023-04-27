@@ -65,8 +65,11 @@ export async function clearOidcPersistentStorage(): Promise<void> {
     // eslint-disable-next-line camelcase
     response_mode: "query",
   });
-  await client.clearStaleState(new WebStorageStateStore({}));
-  const myStorage = window.localStorage;
+  if (window.localStorage)
+    await client.clearStaleState(new WebStorageStateStore({}));
+  else
+    await client.clearStaleState(new WebStorageStateStore({store: window.sessionStorage}));
+  const myStorage = window.localStorage ? window.localStorage : window.sessionStorage;
   const itemsToRemove = [];
   for (let i = 0; i <= myStorage.length; i += 1) {
     const key = myStorage.key(i);

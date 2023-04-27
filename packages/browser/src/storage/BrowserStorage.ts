@@ -30,8 +30,8 @@ import { IStorage } from "@inrupt/solid-client-authn-core";
  * @hidden
  */
 export default class BrowserStorage implements IStorage {
-  get storage(): typeof window.localStorage {
-    return window.localStorage;
+  get storage(): typeof localStorage {
+    return window.localStorage ? window.localStorage : window.sessionStorage;
   }
 
   async get(key: string): Promise<string | undefined> {

@@ -148,10 +148,11 @@ export class AuthCodeRedirectHandler implements IIncomingRedirectHandler {
       // Delete oidc-client-specific session information from storage. This is
       // done automatically when retrieving a bearer token, but since the DPoP
       // binding uses our custom code, this needs to be done manually.
-      if (window.localStorage)
+      if (window.localStorage) {
         window.localStorage.removeItem(`oidc.${oauthState}`);
-      else
+      } else {
         window.sessionStorage.removeItem(`oidc.${oauthState}`);
+      }
     } else {
       tokens = await getBearerToken(url.toString());
     }

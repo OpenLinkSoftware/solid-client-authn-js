@@ -189,6 +189,8 @@ export default class ClientAuthentication {
     // query parameters!).
     try {
       window.history.replaceState(null, "", cleanedUpUrl.toString());
-    } catch(e) {}
+    } catch (e) {
+      // ignore error in Browser extension
+    }
   }
 }

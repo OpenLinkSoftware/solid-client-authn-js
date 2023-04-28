@@ -109,10 +109,11 @@ export async function silentlyAuthenticate(
     // so that we can restore it after completing the silent authentication
     // on incoming redirect. This way, the user is eventually redirected back
     // to the page they were on and not to the app's redirect page.
-    if (window.localStorage)
+    if (window.localStorage !== null) {
       window.localStorage.setItem(KEY_CURRENT_URL, window.location.href);
-    else
+    } else {
       window.sessionStorage.setItem(KEY_CURRENT_URL, window.location.href);
+    }
     await clientAuthn.login(
       {
         sessionId,
@@ -216,10 +217,10 @@ export class Session extends EventEmitter implements IHasSessionEventListener {
     // (as opposed to using our storage abstraction layer) because it is only
     // used in a browser-specific mechanism.
     this.events.on(EVENTS.LOGIN, () => {
-      if (window.localStorage)
-        window.localStorage.setItem(KEY_CURRENT_SESSION, this.info.sessionId)
+      if (window.localStorage !== null)
+        window.localStorage.setItem(KEY_CURRENT_SESSION, this.info.sessionId);
       else
-        window.sessionStorage.setItem(KEY_CURRENT_SESSION, this.info.sessionId)
+        window.sessionStorage.setItem(KEY_CURRENT_SESSION, this.info.sessionId);
     });
 
     this.events.on(EVENTS.SESSION_EXPIRED, () => this.internalLogout(false));
@@ -273,10 +274,11 @@ export class Session extends EventEmitter implements IHasSessionEventListener {
     // Clearing this value means that silent refresh will no longer be attempted.
     // In particular, in the case of a silent authentication error it prevents
     // from getting stuck in an authentication retries loop.
-    if (window.localStorage)
+    if (window.localStorage !== null) {
       window.localStorage.removeItem(KEY_CURRENT_SESSION);
-    else
+    } else {
       window.sessionStorage.removeItem(KEY_CURRENT_SESSION);
+    }
     await this.clientAuthentication.logout(this.info.sessionId);
     this.info.isLoggedIn = false;
     if (emitSignal) {
@@ -316,8 +318,9 @@ export class Session extends EventEmitter implements IHasSessionEventListener {
     );
     if (isLoggedIn(sessionInfo)) {
       this.setSessionInfo(sessionInfo);
-      const currentUrl = window.localStorage ? window.localStorage.getItem(KEY_CURRENT_URL)
-                                             : window.sessionStorage.getItem(KEY_CURRENT_URL);   
+      const currentUrl = window.localStorage
+        ? window.localStorage.getItem(KEY_CURRENT_URL)
+        : window.sessionStorage.getItem(KEY_CURRENT_URL);
       if (currentUrl === null) {
         // The login event can only be triggered **after** the user has been
         // redirected from the IdP with access and ID tokens.
@@ -326,10 +329,11 @@ export class Session extends EventEmitter implements IHasSessionEventListener {
         // If an URL is stored in local storage, we are being logged in after a
         // silent authentication, so remove our currently stored URL location
         // to clean up our state now that we are completing the re-login process.
-        if (window.localStorage)
+        if (window.localStorage !== null) {
           window.localStorage.removeItem(KEY_CURRENT_URL);
-        else
+        } else {
           window.sessionStorage.removeItem(KEY_CURRENT_URL);
+        }
         (this.events as EventEmitter).emit(EVENTS.SESSION_RESTORED, currentUrl);
       }
     } else if (options.restorePreviousSession === true) {
@@ -338,8 +342,9 @@ export class Session extends EventEmitter implements IHasSessionEventListener {
       // was previously logged in, in which case its ID will be present with a known
       // identifier in local storage.
       // Check if we have a locally stored session ID...
-      const storedSessionId = window.localStorage ? window.localStorage.getItem(KEY_CURRENT_SESSION)
-                                                  : window.sessionStorage.getItem(KEY_CURRENT_SESSION);
+      const storedSessionId = window.localStorage
+        ? window.localStorage.getItem(KEY_CURRENT_SESSION)
+        : window.sessionStorage.getItem(KEY_CURRENT_SESSION);
       // ...if not, then there is no ID token, and so silent authentication cannot happen, but
       // if we do have a stored session ID, attempt to re-authenticate now silently.
       if (storedSessionId !== null) {

@@ -96,6 +96,8 @@ export interface IHandleIncomingRedirectOptions {
    * using the browser's current location.
    */
   url?: string;
+
+  tokens?: object;
 }
 
 export async function silentlyAuthenticate(
@@ -310,11 +312,13 @@ export class Session extends EventEmitter implements IHasSessionEventListener {
     const options =
       typeof inputOptions === "string" ? { url: inputOptions } : inputOptions;
     const url = options.url ?? window.location.href;
+    const { tokens } = options;
 
     this.tokenRequestInProgress = true;
     const sessionInfo = await this.clientAuthentication.handleIncomingRedirect(
       url,
-      this.events
+      this.events,
+      tokens
     );
     if (isLoggedIn(sessionInfo)) {
       this.setSessionInfo(sessionInfo);

@@ -51,6 +51,8 @@ export interface ISessionInfo {
    * time until which this session is valid.
    */
   expirationDate?: number;
+
+  tokens?: object;
 }
 
 /**

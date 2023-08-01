@@ -44,6 +44,7 @@ export {
 export { registerClient } from "./dcr/clientRegistrar";
 export {
   getDpopToken,
+  importDpopToken,
   getBearerToken,
   TokenEndpointInput,
   CodeExchangeResult,

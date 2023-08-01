@@ -44,6 +44,7 @@ import {
 } from "@inrupt/solid-client-authn-core";
 import {
   getDpopToken,
+  importDpopToken,
   getBearerToken,
   CodeExchangeResult,
 } from "@inrupt/oidc-client-ext";
@@ -77,7 +78,8 @@ export class AuthCodeRedirectHandler implements IIncomingRedirectHandler {
 
   async handle(
     redirectUrl: string,
-    eventEmitter?: EventEmitter
+    eventEmitter?: EventEmitter,
+    storedTokens?: object
   ): Promise<ISessionInfo & { fetch: typeof fetch }> {
     if (!(await this.canHandle(redirectUrl))) {
       throw new Error(
@@ -136,14 +138,18 @@ export class AuthCodeRedirectHandler implements IIncomingRedirectHandler {
     const tokenCreatedAt = Date.now();
 
     if (isDpop) {
-      tokens = await getDpopToken(issuerConfig, client, {
-        grantType: "authorization_code",
-        // We rely on our 'canHandle' function checking that the OAuth 'code'
-        // parameter is present in our query string.
-        code: url.searchParams.get("code") as string,
-        codeVerifier,
-        redirectUrl: storedRedirectIri,
-      });
+      if (storedTokens) {
+        tokens = await importDpopToken(storedTokens);
+      } else {
+        tokens = await getDpopToken(issuerConfig, client, {
+          grantType: "authorization_code",
+          // We rely on our 'canHandle' function checking that the OAuth 'code'
+          // parameter is present in our query string.
+          code: url.searchParams.get("code") as string,
+          codeVerifier,
+          redirectUrl: storedRedirectIri,
+        });
+      }
 
       // Delete oidc-client-specific session information from storage. This is
       // done automatically when retrieving a bearer token, but since the DPoP
@@ -154,7 +160,11 @@ export class AuthCodeRedirectHandler implements IIncomingRedirectHandler {
         window.sessionStorage.removeItem(`oidc.${oauthState}`);
       }
     } else {
-      tokens = await getBearerToken(url.toString());
+      if (storedTokens) {
+        tokens = <CodeExchangeResult>storedTokens;
+      } else {
+        tokens = await getBearerToken(url.toString());
+      }
     }
 
     let refreshOptions: RefreshOptions | undefined;
@@ -189,6 +199,7 @@ export class AuthCodeRedirectHandler implements IIncomingRedirectHandler {
 
     return Object.assign(sessionInfo, {
       fetch: authFetch,
+      tokens,
       expirationDate:
         typeof tokens.expiresIn === "number"
           ? tokenCreatedAt + tokens.expiresIn * 1000

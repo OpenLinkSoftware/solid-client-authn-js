@@ -135,10 +135,15 @@ export default class ClientAuthentication {
 
   handleIncomingRedirect = async (
     url: string,
-    eventEmitter: EventEmitter
+    eventEmitter: EventEmitter,
+    tokens: object | undefined
   ): Promise<ISessionInfo | undefined> => {
     try {
-      const redirectInfo = await this.redirectHandler.handle(url, eventEmitter);
+      const redirectInfo = await this.redirectHandler.handle(
+        url,
+        eventEmitter,
+        tokens
+      );
       // The `FallbackRedirectHandler` directly returns the global `fetch` for
       // his value, so we should ensure it's bound to `window` rather than to
       // ClientAuthentication, to avoid the following error:
@@ -153,6 +158,7 @@ export default class ClientAuthentication {
         webId: redirectInfo.webId,
         sessionId: redirectInfo.sessionId,
         expirationDate: redirectInfo.expirationDate,
+        tokens: redirectInfo.tokens,
       };
     } catch (err) {
       // Strip the oauth params:

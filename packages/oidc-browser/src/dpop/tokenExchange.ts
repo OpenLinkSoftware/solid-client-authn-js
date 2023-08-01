@@ -28,6 +28,7 @@ import {
   getWebidFromTokenPayload,
   KeyPair,
   generateDpopKeyPair,
+  importDpopKeyPair,
   TokenEndpointResponse,
   OidcProviderError,
   InvalidResponseError,
@@ -265,6 +266,26 @@ export async function getTokens(
     webId,
     dpopKey,
     expiresIn: tokenResponse.expires_in,
+  };
+}
+
+export async function importDpopToken(
+  storedTokens: Record<string, any>,
+): Promise<CodeExchangeResult> {
+
+  let dpopKey: KeyPair | undefined;
+
+  if (storedTokens['dpopKey'] && storedTokens['dpopKey']['publicKey'] && storedTokens['dpopKey']['privateKeyJWK']) {
+    dpopKey = await importDpopKeyPair(storedTokens['dpopKey']['publicKey'], storedTokens['dpopKey']['privateKeyJWK']);
+  }
+
+  return {
+    accessToken: storedTokens['accessToken'],
+    idToken: storedTokens['idToken'],
+    refreshToken: storedTokens['tokenResponse'] ?? undefined,
+    webId : storedTokens['webId'],
+    dpopKey,
+    expiresIn: storedTokens['expiresIn'],
   };
 }
 

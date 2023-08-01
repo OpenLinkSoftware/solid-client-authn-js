@@ -59,6 +59,7 @@ export const mockKeyPair = async (): Promise<KeyPair> => {
   return {
     privateKey: (await importJWK(mockJwk())) as KeyObject,
     publicKey,
+    privateKeyJWK: mockJwk()
   };
 };
 

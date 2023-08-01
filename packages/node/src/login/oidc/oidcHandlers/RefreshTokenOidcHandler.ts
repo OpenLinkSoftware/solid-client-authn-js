@@ -162,6 +162,7 @@ export default class RefreshTokenOidcHandler implements IOidcHandler {
           JSON.parse(privateKey),
           PREFERRED_SIGNING_ALG[0]
         )) as KeyObject,
+        privateKeyJWK: JSON.parse(privateKey) as JWK,
       };
     }
 

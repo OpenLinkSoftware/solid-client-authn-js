@@ -39,7 +39,7 @@ import { EventEmitter } from "events";
  */
 export default class AggregateIncomingRedirectHandler
   extends AggregateHandler<
-    [string, EventEmitter],
+    [string, EventEmitter, object],
     ISessionInfo & { fetch: typeof fetch }
   >
   implements IIncomingRedirectHandler

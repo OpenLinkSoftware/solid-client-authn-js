@@ -19,7 +19,7 @@
 // SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-import { JWK, KeyLike, SignJWT, generateKeyPair, exportJWK } from "jose";
+import { JWK, KeyLike, SignJWT, generateKeyPair, exportJWK, importJWK } from "jose";
 import { v4 } from "uuid";
 import { PREFERRED_SIGNING_ALG } from "../constant";
 
@@ -38,6 +38,7 @@ function normalizeHTU(audience: string): string {
 export type KeyPair = {
   privateKey: KeyLike;
   publicKey: JWK;
+  privateKeyJWK?: JWK;
 };
 
 /**
@@ -70,13 +71,28 @@ export async function createDpopHeader(
 
 export async function generateDpopKeyPair(): Promise<KeyPair> {
   const { privateKey, publicKey } = await generateKeyPair(
-    PREFERRED_SIGNING_ALG[0]
+    PREFERRED_SIGNING_ALG[0], {extractable:true}
   );
   const dpopKeyPair = {
     privateKey,
     publicKey: await exportJWK(publicKey),
+    privateKeyJWK: await exportJWK(privateKey)
   };
   // The alg property isn't set by exportJWK, so set it manually.
   [dpopKeyPair.publicKey.alg] = PREFERRED_SIGNING_ALG;
+  [dpopKeyPair.privateKeyJWK.alg] = PREFERRED_SIGNING_ALG;
+  return dpopKeyPair;
+}
+
+export async function importDpopKeyPair(pubKey: any, privKey: any): Promise<KeyPair> {
+  const publicKey: JWK = <JWK> pubKey;
+  const privateKeyJWK: JWK = <JWK> privKey;
+  const key: KeyLike = <KeyLike> await importJWK(privateKeyJWK)
+
+  const dpopKeyPair = {
+    privateKey: key,
+    publicKey,
+    privateKeyJWK
+  };
   return dpopKeyPair;
 }

@@ -128,7 +128,11 @@ export default class ClientAuthentication {
     url: string,
     eventEmitter: EventEmitter
   ): Promise<ISessionInfo | undefined> => {
-    const redirectInfo = await this.redirectHandler.handle(url, eventEmitter);
+    const redirectInfo = await this.redirectHandler.handle(
+      url,
+      eventEmitter,
+      undefined
+    );
 
     this.fetch = redirectInfo.fetch;
 

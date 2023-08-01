@@ -95,6 +95,7 @@ export {
   createDpopHeader,
   KeyPair,
   generateDpopKeyPair,
+  importDpopKeyPair,
 } from "./authenticatedFetch/dpopUtils";
 
 export {

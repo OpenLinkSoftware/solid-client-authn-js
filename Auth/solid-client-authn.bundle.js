@@ -56,9 +56,9 @@ class ClientAuthentication {
             }
             return sessionInfo;
         };
-        this.handleIncomingRedirect = async (url, eventEmitter, tokens) => {
+        this.handleIncomingRedirect = async (url, eventEmitter) => {
             try {
-                const redirectInfo = await this.redirectHandler.handle(url, eventEmitter, tokens);
+                const redirectInfo = await this.redirectHandler.handle(url, eventEmitter);
                 this.fetch = redirectInfo.fetch.bind(window);
                 this.cleanUrlAfterRedirect(url);
                 return {
@@ -66,7 +66,6 @@ class ClientAuthentication {
                     webId: redirectInfo.webId,
                     sessionId: redirectInfo.sessionId,
                     expirationDate: redirectInfo.expirationDate,
-                    tokens: redirectInfo.tokens
                 };
             }
             catch (err) {
@@ -85,7 +84,11 @@ class ClientAuthentication {
         cleanedUpUrl.searchParams.delete("error");
         cleanedUpUrl.searchParams.delete("error_description");
         cleanedUpUrl.searchParams.delete("iss");
-        window.history.replaceState(null, "", cleanedUpUrl.toString());
+        try {
+            window.history.replaceState(null, "", cleanedUpUrl.toString());
+        }
+        catch (e) {
+        }
     }
 }
 exports["default"] = ClientAuthentication;
@@ -115,7 +118,12 @@ async function silentlyAuthenticate(sessionId, clientAuthn, session) {
     var _a;
     const storedSessionInfo = await clientAuthn.validateCurrentSession(sessionId);
     if (storedSessionInfo !== null) {
-        window.localStorage.setItem(constant_1.KEY_CURRENT_URL, window.location.href);
+        if (window.localStorage !== null) {
+            window.localStorage.setItem(constant_1.KEY_CURRENT_URL, window.location.href);
+        }
+        else {
+            window.sessionStorage.setItem(constant_1.KEY_CURRENT_URL, window.location.href);
+        }
         await clientAuthn.login({
             sessionId,
             prompt: "none",
@@ -150,7 +158,12 @@ class Session extends events_1.default {
             return this.clientAuthentication.fetch(url, init);
         };
         this.internalLogout = async (emitSignal) => {
-            window.localStorage.removeItem(constant_1.KEY_CURRENT_SESSION);
+            if (window.localStorage !== null) {
+                window.localStorage.removeItem(constant_1.KEY_CURRENT_SESSION);
+            }
+            else {
+                window.sessionStorage.removeItem(constant_1.KEY_CURRENT_SESSION);
+            }
             await this.clientAuthentication.logout(this.info.sessionId);
             this.info.isLoggedIn = false;
             if (emitSignal) {
@@ -168,22 +181,30 @@ class Session extends events_1.default {
             }
             const options = typeof inputOptions === "string" ? { url: inputOptions } : inputOptions;
             const url = (_a = options.url) !== null && _a !== void 0 ? _a : window.location.href;
-            const tokens = options.tokens;
             this.tokenRequestInProgress = true;
-            const sessionInfo = await this.clientAuthentication.handleIncomingRedirect(url, this.events, tokens);
+            const sessionInfo = await this.clientAuthentication.handleIncomingRedirect(url, this.events);
             if (isLoggedIn(sessionInfo)) {
                 this.setSessionInfo(sessionInfo);
-                const currentUrl = window.localStorage.getItem(constant_1.KEY_CURRENT_URL);
+                const currentUrl = window.localStorage
+                    ? window.localStorage.getItem(constant_1.KEY_CURRENT_URL)
+                    : window.sessionStorage.getItem(constant_1.KEY_CURRENT_URL);
                 if (currentUrl === null) {
                     this.events.emit(solid_client_authn_core_1.EVENTS.LOGIN);
                 }
                 else {
-                    window.localStorage.removeItem(constant_1.KEY_CURRENT_URL);
+                    if (window.localStorage !== null) {
+                        window.localStorage.removeItem(constant_1.KEY_CURRENT_URL);
+                    }
+                    else {
+                        window.sessionStorage.removeItem(constant_1.KEY_CURRENT_URL);
+                    }
                     this.events.emit(solid_client_authn_core_1.EVENTS.SESSION_RESTORED, currentUrl);
                 }
             }
             else if (options.restorePreviousSession === true) {
-                const storedSessionId = window.localStorage.getItem(constant_1.KEY_CURRENT_SESSION);
+                const storedSessionId = window.localStorage
+                    ? window.localStorage.getItem(constant_1.KEY_CURRENT_SESSION)
+                    : window.sessionStorage.getItem(constant_1.KEY_CURRENT_SESSION);
                 if (storedSessionId !== null) {
                     const attemptedSilentAuthentication = await silentlyAuthenticate(storedSessionId, this.clientAuthentication, this);
                     if (attemptedSilentAuthentication) {
@@ -220,7 +241,12 @@ class Session extends events_1.default {
                 isLoggedIn: false,
             };
         }
-        this.events.on(solid_client_authn_core_1.EVENTS.LOGIN, () => window.localStorage.setItem(constant_1.KEY_CURRENT_SESSION, this.info.sessionId));
+        this.events.on(solid_client_authn_core_1.EVENTS.LOGIN, () => {
+            if (window.localStorage !== null)
+                window.localStorage.setItem(constant_1.KEY_CURRENT_SESSION, this.info.sessionId);
+            else
+                window.sessionStorage.setItem(constant_1.KEY_CURRENT_SESSION, this.info.sessionId);
+        });
         this.events.on(solid_client_authn_core_1.EVENTS.SESSION_EXPIRED, () => this.internalLogout(false));
         this.events.on(solid_client_authn_core_1.EVENTS.ERROR, () => this.internalLogout(false));
     }
@@ -736,7 +762,11 @@ class Redirector {
             options.handleRedirect(redirectUrl);
         }
         else if (options && options.redirectByReplacingState) {
-            window.history.replaceState({}, "", redirectUrl);
+            try {
+                window.history.replaceState({}, "", redirectUrl);
+            }
+            catch (e) {
+            }
         }
         else {
             window.location.href = redirectUrl;
@@ -779,7 +809,7 @@ class AuthCodeRedirectHandler {
             throw new Error(`[${redirectUrl}] is not a valid URL, and cannot be used as a redirect URL: ${e}`);
         }
     }
-    async handle(redirectUrl, eventEmitter, stored_tokens) {
+    async handle(redirectUrl, eventEmitter) {
         if (!(await this.canHandle(redirectUrl))) {
             throw new Error(`AuthCodeRedirectHandler cannot handle [${redirectUrl}]: it is missing one of [code, state].`);
         }
@@ -803,16 +833,18 @@ class AuthCodeRedirectHandler {
         let tokens;
         const tokenCreatedAt = Date.now();
         if (isDpop) {
-            if (stored_tokens)
-                tokens = stored_tokens;
-            else
-                tokens = await (0, oidc_client_ext_1.getDpopToken)(issuerConfig, client, {
-                    grantType: "authorization_code",
-                    code: url.searchParams.get("code"),
-                    codeVerifier,
-                    redirectUrl: storedRedirectIri,
-                });
-            window.localStorage.removeItem(`oidc.${oauthState}`);
+            tokens = await (0, oidc_client_ext_1.getDpopToken)(issuerConfig, client, {
+                grantType: "authorization_code",
+                code: url.searchParams.get("code"),
+                codeVerifier,
+                redirectUrl: storedRedirectIri,
+            });
+            if (window.localStorage) {
+                window.localStorage.removeItem(`oidc.${oauthState}`);
+            }
+            else {
+                window.sessionStorage.removeItem(`oidc.${oauthState}`);
+            }
         }
         else {
             tokens = await (0, oidc_client_ext_1.getBearerToken)(url.toString());
@@ -841,7 +873,6 @@ class AuthCodeRedirectHandler {
         }
         return Object.assign(sessionInfo, {
             fetch: authFetch,
-            tokens,
             expirationDate: typeof tokens.expiresIn === "number"
                 ? tokenCreatedAt + tokens.expiresIn * 1000
                 : null,
@@ -1168,7 +1199,7 @@ exports.SessionInfoManager = SessionInfoManager;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 class BrowserStorage {
     get storage() {
-        return window.localStorage;
+        return window.localStorage ? window.localStorage : window.sessionStorage;
     }
     async get(key) {
         return this.storage.getItem(key) || undefined;
@@ -5328,8 +5359,15 @@ async function clearOidcPersistentStorage() {
     const client = new _inrupt_oidc_client__WEBPACK_IMPORTED_MODULE_0__.OidcClient({
         response_mode: "query",
     });
-    await client.clearStaleState(new _inrupt_oidc_client__WEBPACK_IMPORTED_MODULE_0__.WebStorageStateStore({}));
-    const myStorage = window.localStorage;
+    if (window.localStorage) {
+        await client.clearStaleState(new _inrupt_oidc_client__WEBPACK_IMPORTED_MODULE_0__.WebStorageStateStore({}));
+    }
+    else {
+        await client.clearStaleState(new _inrupt_oidc_client__WEBPACK_IMPORTED_MODULE_0__.WebStorageStateStore({ store: window.sessionStorage }));
+    }
+    const myStorage = window.localStorage
+        ? window.localStorage
+        : window.sessionStorage;
     const itemsToRemove = [];
     for (let i = 0; i <= myStorage.length; i += 1) {
         const key = myStorage.key(i);
@@ -7491,7 +7529,7 @@ class GeneralSign {
                 jws.payload = payload;
             }
             else if (jws.payload !== payload) {
-                throw new _util_errors_js__WEBPACK_IMPORTED_MODULE_1__.JWSInvalid('inconsistent use of JWS Unencoded Payload Option (RFC7797)');
+                throw new _util_errors_js__WEBPACK_IMPORTED_MODULE_1__.JWSInvalid('inconsistent use of JWS Unencoded Payload (RFC7797)');
             }
             jws.signatures.push(rest);
         }
@@ -8913,15 +8951,26 @@ const checkAudiencePresence = (audPayload, audOption) => {
     if (!(0,_is_object_js__WEBPACK_IMPORTED_MODULE_4__["default"])(payload)) {
         throw new _util_errors_js__WEBPACK_IMPORTED_MODULE_0__.JWTInvalid('JWT Claims Set must be a top-level JSON object');
     }
-    const { issuer } = options;
+    const { requiredClaims = [], issuer, subject, audience, maxTokenAge } = options;
+    if (maxTokenAge !== undefined)
+        requiredClaims.push('iat');
+    if (audience !== undefined)
+        requiredClaims.push('aud');
+    if (subject !== undefined)
+        requiredClaims.push('sub');
+    if (issuer !== undefined)
+        requiredClaims.push('iss');
+    for (const claim of new Set(requiredClaims.reverse())) {
+        if (!(claim in payload)) {
+            throw new _util_errors_js__WEBPACK_IMPORTED_MODULE_0__.JWTClaimValidationFailed(`missing required "${claim}" claim`, claim, 'missing');
+        }
+    }
     if (issuer && !(Array.isArray(issuer) ? issuer : [issuer]).includes(payload.iss)) {
         throw new _util_errors_js__WEBPACK_IMPORTED_MODULE_0__.JWTClaimValidationFailed('unexpected "iss" claim value', 'iss', 'check_failed');
     }
-    const { subject } = options;
     if (subject && payload.sub !== subject) {
         throw new _util_errors_js__WEBPACK_IMPORTED_MODULE_0__.JWTClaimValidationFailed('unexpected "sub" claim value', 'sub', 'check_failed');
     }
-    const { audience } = options;
     if (audience &&
         !checkAudiencePresence(payload.aud, typeof audience === 'string' ? [audience] : audience)) {
         throw new _util_errors_js__WEBPACK_IMPORTED_MODULE_0__.JWTClaimValidationFailed('unexpected "aud" claim value', 'aud', 'check_failed');
@@ -8942,7 +8991,7 @@ const checkAudiencePresence = (audPayload, audOption) => {
     }
     const { currentDate } = options;
     const now = (0,_epoch_js__WEBPACK_IMPORTED_MODULE_2__["default"])(currentDate || new Date());
-    if ((payload.iat !== undefined || options.maxTokenAge) && typeof payload.iat !== 'number') {
+    if ((payload.iat !== undefined || maxTokenAge) && typeof payload.iat !== 'number') {
         throw new _util_errors_js__WEBPACK_IMPORTED_MODULE_0__.JWTClaimValidationFailed('"iat" claim must be a number', 'iat', 'invalid');
     }
     if (payload.nbf !== undefined) {
@@ -8961,9 +9010,9 @@ const checkAudiencePresence = (audPayload, audOption) => {
             throw new _util_errors_js__WEBPACK_IMPORTED_MODULE_0__.JWTExpired('"exp" claim timestamp check failed', 'exp', 'check_failed');
         }
     }
-    if (options.maxTokenAge) {
+    if (maxTokenAge) {
         const age = now - payload.iat;
-        const max = typeof options.maxTokenAge === 'number' ? options.maxTokenAge : (0,_secs_js__WEBPACK_IMPORTED_MODULE_3__["default"])(options.maxTokenAge);
+        const max = typeof maxTokenAge === 'number' ? maxTokenAge : (0,_secs_js__WEBPACK_IMPORTED_MODULE_3__["default"])(maxTokenAge);
         if (age - tolerance > max) {
             throw new _util_errors_js__WEBPACK_IMPORTED_MODULE_0__.JWTExpired('"iat" claim timestamp check failed (too far in the past)', 'iat', 'check_failed');
         }

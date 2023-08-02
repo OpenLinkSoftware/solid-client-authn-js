@@ -47,6 +47,8 @@ const authCode =
 
     initButtons((sLogin==='1'), IdP)
 
+    if (authCode)
+      return;
 
     if (window.location.hash === '#relogin') {
       await authClient.logout();

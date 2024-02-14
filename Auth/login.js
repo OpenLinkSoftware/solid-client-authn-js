@@ -81,6 +81,7 @@ const authCode =
       authClient.login({
         oidcIssuer: idp,
         redirectUrl: callback,
+        tokenType: "Bearer",
         clientName: "OSDS"
       });
 

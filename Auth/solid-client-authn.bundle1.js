@@ -56,9 +56,9 @@ class ClientAuthentication {
             }
             return sessionInfo;
         };
-        this.handleIncomingRedirect = async (url, eventEmitter) => {
+        this.handleIncomingRedirect = async (url, eventEmitter, tokens) => {
             try {
-                const redirectInfo = await this.redirectHandler.handle(url, eventEmitter);
+                const redirectInfo = await this.redirectHandler.handle(url, eventEmitter, tokens);
                 this.fetch = redirectInfo.fetch.bind(window);
                 this.cleanUrlAfterRedirect(url);
                 return {
@@ -66,6 +66,7 @@ class ClientAuthentication {
                     webId: redirectInfo.webId,
                     sessionId: redirectInfo.sessionId,
                     expirationDate: redirectInfo.expirationDate,
+                    tokens: redirectInfo.tokens,
                 };
             }
             catch (err) {
@@ -181,8 +182,9 @@ class Session extends events_1.default {
             }
             const options = typeof inputOptions === "string" ? { url: inputOptions } : inputOptions;
             const url = (_a = options.url) !== null && _a !== void 0 ? _a : window.location.href;
+            const { tokens } = options;
             this.tokenRequestInProgress = true;
-            const sessionInfo = await this.clientAuthentication.handleIncomingRedirect(url, this.events);
+            const sessionInfo = await this.clientAuthentication.handleIncomingRedirect(url, this.events, tokens);
             if (isLoggedIn(sessionInfo)) {
                 this.setSessionInfo(sessionInfo);
                 const currentUrl = window.localStorage
@@ -809,7 +811,7 @@ class AuthCodeRedirectHandler {
             throw new Error(`[${redirectUrl}] is not a valid URL, and cannot be used as a redirect URL: ${e}`);
         }
     }
-    async handle(redirectUrl, eventEmitter) {
+    async handle(redirectUrl, eventEmitter, storedTokens) {
         if (!(await this.canHandle(redirectUrl))) {
             throw new Error(`AuthCodeRedirectHandler cannot handle [${redirectUrl}]: it is missing one of [code, state].`);
         }
@@ -833,12 +835,17 @@ class AuthCodeRedirectHandler {
         let tokens;
         const tokenCreatedAt = Date.now();
         if (isDpop) {
-            tokens = await (0, oidc_client_ext_1.getDpopToken)(issuerConfig, client, {
-                grantType: "authorization_code",
-                code: url.searchParams.get("code"),
-                codeVerifier,
-                redirectUrl: storedRedirectIri,
-            });
+            if (storedTokens) {
+                tokens = await (0, oidc_client_ext_1.importDpopToken)(storedTokens);
+            }
+            else {
+                tokens = await (0, oidc_client_ext_1.getDpopToken)(issuerConfig, client, {
+                    grantType: "authorization_code",
+                    code: url.searchParams.get("code"),
+                    codeVerifier,
+                    redirectUrl: storedRedirectIri,
+                });
+            }
             if (window.localStorage) {
                 window.localStorage.removeItem(`oidc.${oauthState}`);
             }
@@ -847,7 +854,12 @@ class AuthCodeRedirectHandler {
             }
         }
         else {
-            tokens = await (0, oidc_client_ext_1.getBearerToken)(url.toString());
+            if (storedTokens) {
+                tokens = storedTokens;
+            }
+            else {
+                tokens = await (0, oidc_client_ext_1.getBearerToken)(url.toString());
+            }
         }
         let refreshOptions;
         if (tokens.refreshToken !== undefined) {
@@ -873,6 +885,7 @@ class AuthCodeRedirectHandler {
         }
         return Object.assign(sessionInfo, {
             fetch: authFetch,
+            tokens,
             expirationDate: typeof tokens.expiresIn === "number"
                 ? tokenCreatedAt + tokens.expiresIn * 1000
                 : null,
@@ -3140,12 +3153,25 @@ async function createDpopHeader(audience, method, dpopKey) {
         .sign(dpopKey.privateKey, {});
 }
 async function generateDpopKeyPair() {
-    const { privateKey, publicKey } = await jose.generateKeyPair(PREFERRED_SIGNING_ALG[0]);
+    const { privateKey, publicKey } = await jose.generateKeyPair(PREFERRED_SIGNING_ALG[0], { extractable: true });
     const dpopKeyPair = {
         privateKey,
         publicKey: await jose.exportJWK(publicKey),
+        privateKeyJWK: await jose.exportJWK(privateKey)
     };
     [dpopKeyPair.publicKey.alg] = PREFERRED_SIGNING_ALG;
+    [dpopKeyPair.privateKeyJWK.alg] = PREFERRED_SIGNING_ALG;
+    return dpopKeyPair;
+}
+async function importDpopKeyPair(pubKey, privKey) {
+    const publicKey = pubKey;
+    const privateKeyJWK = privKey;
+    const key = await jose.importJWK(privateKeyJWK);
+    const dpopKeyPair = {
+        privateKey: key,
+        publicKey,
+        privateKeyJWK
+    };
     return dpopKeyPair;
 }
 
@@ -3317,6 +3343,7 @@ exports.generateDpopKeyPair = generateDpopKeyPair;
 exports.getSessionIdFromOauthState = getSessionIdFromOauthState;
 exports.getWebidFromTokenPayload = getWebidFromTokenPayload;
 exports.handleRegistration = handleRegistration;
+exports.importDpopKeyPair = importDpopKeyPair;
 exports.isSupportedTokenType = isSupportedTokenType;
 exports.isValidRedirectUrl = isValidRedirectUrl;
 exports.loadOidcContextFromStorage = loadOidcContextFromStorage;
@@ -5069,6 +5096,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   "clearOidcPersistentStorage": () => (/* binding */ clearOidcPersistentStorage),
 /* harmony export */   "getBearerToken": () => (/* binding */ getBearerToken),
 /* harmony export */   "getDpopToken": () => (/* binding */ getDpopToken),
+/* harmony export */   "importDpopToken": () => (/* binding */ importDpopToken),
 /* harmony export */   "refresh": () => (/* binding */ refresh),
 /* harmony export */   "registerClient": () => (/* binding */ registerClient),
 /* harmony export */   "removeOidcQueryParam": () => (/* binding */ removeOidcQueryParam)
@@ -5244,6 +5272,21 @@ async function getTokens(issuer, client, data, dpop) {
         webId,
         dpopKey,
         expiresIn: tokenResponse.expires_in,
+    };
+}
+async function importDpopToken(storedTokens) {
+    var _a;
+    let dpopKey;
+    if (storedTokens['dpopKey'] && storedTokens['dpopKey']['publicKey'] && storedTokens['dpopKey']['privateKeyJWK']) {
+        dpopKey = await (0,_inrupt_solid_client_authn_core__WEBPACK_IMPORTED_MODULE_1__.importDpopKeyPair)(storedTokens['dpopKey']['publicKey'], storedTokens['dpopKey']['privateKeyJWK']);
+    }
+    return {
+        accessToken: storedTokens['accessToken'],
+        idToken: storedTokens['idToken'],
+        refreshToken: (_a = storedTokens['tokenResponse']) !== null && _a !== void 0 ? _a : undefined,
+        webId: storedTokens['webId'],
+        dpopKey,
+        expiresIn: storedTokens['expiresIn'],
     };
 }
 async function getBearerToken(redirectUrl) {
@@ -5460,6 +5503,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   "getSessionIdFromOauthState": () => (/* binding */ getSessionIdFromOauthState),
 /* harmony export */   "getWebidFromTokenPayload": () => (/* binding */ getWebidFromTokenPayload),
 /* harmony export */   "handleRegistration": () => (/* binding */ handleRegistration),
+/* harmony export */   "importDpopKeyPair": () => (/* binding */ importDpopKeyPair),
 /* harmony export */   "isSupportedTokenType": () => (/* binding */ isSupportedTokenType),
 /* harmony export */   "isValidRedirectUrl": () => (/* binding */ isValidRedirectUrl),
 /* harmony export */   "loadOidcContextFromStorage": () => (/* binding */ loadOidcContextFromStorage),
@@ -5828,12 +5872,25 @@ async function createDpopHeader(audience, method, dpopKey) {
         .sign(dpopKey.privateKey, {});
 }
 async function generateDpopKeyPair() {
-    const { privateKey, publicKey } = await (0,jose__WEBPACK_IMPORTED_MODULE_1__.generateKeyPair)(PREFERRED_SIGNING_ALG[0]);
+    const { privateKey, publicKey } = await (0,jose__WEBPACK_IMPORTED_MODULE_1__.generateKeyPair)(PREFERRED_SIGNING_ALG[0], { extractable: true });
     const dpopKeyPair = {
         privateKey,
         publicKey: await (0,jose__WEBPACK_IMPORTED_MODULE_1__.exportJWK)(publicKey),
+        privateKeyJWK: await (0,jose__WEBPACK_IMPORTED_MODULE_1__.exportJWK)(privateKey)
     };
     [dpopKeyPair.publicKey.alg] = PREFERRED_SIGNING_ALG;
+    [dpopKeyPair.privateKeyJWK.alg] = PREFERRED_SIGNING_ALG;
+    return dpopKeyPair;
+}
+async function importDpopKeyPair(pubKey, privKey) {
+    const publicKey = pubKey;
+    const privateKeyJWK = privKey;
+    const key = await (0,jose__WEBPACK_IMPORTED_MODULE_1__.importJWK)(privateKeyJWK);
+    const dpopKeyPair = {
+        privateKey: key,
+        publicKey,
+        privateKeyJWK
+    };
     return dpopKeyPair;
 }
 
@@ -7529,7 +7586,7 @@ class GeneralSign {
                 jws.payload = payload;
             }
             else if (jws.payload !== payload) {
-                throw new _util_errors_js__WEBPACK_IMPORTED_MODULE_1__.JWSInvalid('inconsistent use of JWS Unencoded Payload (RFC7797)');
+                throw new _util_errors_js__WEBPACK_IMPORTED_MODULE_1__.JWSInvalid('inconsistent use of JWS Unencoded Payload Option (RFC7797)');
             }
             jws.signatures.push(rest);
         }
@@ -8951,26 +9008,15 @@ const checkAudiencePresence = (audPayload, audOption) => {
     if (!(0,_is_object_js__WEBPACK_IMPORTED_MODULE_4__["default"])(payload)) {
         throw new _util_errors_js__WEBPACK_IMPORTED_MODULE_0__.JWTInvalid('JWT Claims Set must be a top-level JSON object');
     }
-    const { requiredClaims = [], issuer, subject, audience, maxTokenAge } = options;
-    if (maxTokenAge !== undefined)
-        requiredClaims.push('iat');
-    if (audience !== undefined)
-        requiredClaims.push('aud');
-    if (subject !== undefined)
-        requiredClaims.push('sub');
-    if (issuer !== undefined)
-        requiredClaims.push('iss');
-    for (const claim of new Set(requiredClaims.reverse())) {
-        if (!(claim in payload)) {
-            throw new _util_errors_js__WEBPACK_IMPORTED_MODULE_0__.JWTClaimValidationFailed(`missing required "${claim}" claim`, claim, 'missing');
-        }
-    }
+    const { issuer } = options;
     if (issuer && !(Array.isArray(issuer) ? issuer : [issuer]).includes(payload.iss)) {
         throw new _util_errors_js__WEBPACK_IMPORTED_MODULE_0__.JWTClaimValidationFailed('unexpected "iss" claim value', 'iss', 'check_failed');
     }
+    const { subject } = options;
     if (subject && payload.sub !== subject) {
         throw new _util_errors_js__WEBPACK_IMPORTED_MODULE_0__.JWTClaimValidationFailed('unexpected "sub" claim value', 'sub', 'check_failed');
     }
+    const { audience } = options;
     if (audience &&
         !checkAudiencePresence(payload.aud, typeof audience === 'string' ? [audience] : audience)) {
         throw new _util_errors_js__WEBPACK_IMPORTED_MODULE_0__.JWTClaimValidationFailed('unexpected "aud" claim value', 'aud', 'check_failed');
@@ -8991,7 +9037,7 @@ const checkAudiencePresence = (audPayload, audOption) => {
     }
     const { currentDate } = options;
     const now = (0,_epoch_js__WEBPACK_IMPORTED_MODULE_2__["default"])(currentDate || new Date());
-    if ((payload.iat !== undefined || maxTokenAge) && typeof payload.iat !== 'number') {
+    if ((payload.iat !== undefined || options.maxTokenAge) && typeof payload.iat !== 'number') {
         throw new _util_errors_js__WEBPACK_IMPORTED_MODULE_0__.JWTClaimValidationFailed('"iat" claim must be a number', 'iat', 'invalid');
     }
     if (payload.nbf !== undefined) {
@@ -9010,9 +9056,9 @@ const checkAudiencePresence = (audPayload, audOption) => {
             throw new _util_errors_js__WEBPACK_IMPORTED_MODULE_0__.JWTExpired('"exp" claim timestamp check failed', 'exp', 'check_failed');
         }
     }
-    if (maxTokenAge) {
+    if (options.maxTokenAge) {
         const age = now - payload.iat;
-        const max = typeof maxTokenAge === 'number' ? maxTokenAge : (0,_secs_js__WEBPACK_IMPORTED_MODULE_3__["default"])(maxTokenAge);
+        const max = typeof options.maxTokenAge === 'number' ? options.maxTokenAge : (0,_secs_js__WEBPACK_IMPORTED_MODULE_3__["default"])(options.maxTokenAge);
         if (age - tolerance > max) {
             throw new _util_errors_js__WEBPACK_IMPORTED_MODULE_0__.JWTExpired('"iat" claim timestamp check failed (too far in the past)', 'iat', 'check_failed');
         }

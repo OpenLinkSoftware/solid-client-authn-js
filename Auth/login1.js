@@ -3,11 +3,13 @@ const authClient = solidClientAuthentication.default;
 var url = new URL(window.location.href)
 const url_hash = url.hash;
 
-const callback = url.origin+url.pathname;
 
 const IdP = url.searchParams.get('idp') || '';
 const autoLogin = url.searchParams.get('autologin');
 var sLogin = url.searchParams.get('slogin');
+const sApp = url.searchParams.get('app');
+
+const callback = url.origin+url.pathname + (sApp ? '?opl_app='+sApp : '');
 
 const authCode =
     url.searchParams.get("code") ||
@@ -23,8 +25,6 @@ const authCode =
     if (!authCode)
       sLogin=0;
   }
-
-
 
 
   document.addEventListener('DOMContentLoaded', async () => 

@@ -9,7 +9,7 @@ const autoLogin = url.searchParams.get('autologin');
 var sLogin = url.searchParams.get('slogin');
 const sApp = url.searchParams.get('app');
 
-const callback = url.origin+url.pathname + (sApp ? '?opl_app='+sApp : '');
+const callback = url.origin+url.pathname + (sApp ? '?app='+sApp : '');
 
 const authCode =
     url.searchParams.get("code") ||

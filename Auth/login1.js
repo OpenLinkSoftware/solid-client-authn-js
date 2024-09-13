@@ -82,7 +82,7 @@ const authCode =
       authClient.login({
         oidcIssuer: idp,
         redirectUrl: callback,
-        tokenType: mode==="Bearer" ? "Bearer" : "DPoP", 
+        tokenType: sMode==="Bearer" ? "Bearer" : "DPoP", 
         clientName: "OSDS"
       });
 

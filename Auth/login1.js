@@ -8,6 +8,7 @@ const IdP = url.searchParams.get('idp') || '';
 const autoLogin = url.searchParams.get('autologin');
 var sLogin = url.searchParams.get('slogin');
 const sApp = url.searchParams.get('app');
+const sMode = url.searchParams.get('mode');
 
 const callback = url.origin+url.pathname + (sApp ? '?app='+sApp : '');
 
@@ -81,7 +82,7 @@ const authCode =
       authClient.login({
         oidcIssuer: idp,
         redirectUrl: callback,
-        tokenType: "DPoP", //"Bearer",
+        tokenType: mode==="Bearer" ? "Bearer" : "DPoP", 
         clientName: "OSDS"
       });
 

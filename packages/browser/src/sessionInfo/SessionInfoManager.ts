@@ -61,7 +61,11 @@ export async function clear(
     // FIXME: This is needed until the DPoP key is stored safely
     storage.delete("clientKey", { secure: false }),
   ]);
-  await clearOidcPersistentStorage();
+  try {
+    await clearOidcPersistentStorage();
+  } catch(e) {
+    console.log(e)
+  }
 }
 
 /**
